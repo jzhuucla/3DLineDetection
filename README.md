@@ -3,9 +3,11 @@ A simple and efficient 3D line detection algorithm for large scale unorganized p
 
 Prerequisites:
 ---
-1. OpenCV > 2.4.x
+1. OpenCV 2.4.x
 2. OpenMP
-3. No other libs
+3. PCL >= 1.7
+4. gflags
+5. glog
 
 Usage:
 ---

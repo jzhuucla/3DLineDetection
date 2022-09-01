@@ -1,5 +1,10 @@
 ﻿#include "LineDetection3D.h"
+
+#include <cstdlib>
+
 #include <omp.h>
+#include <pcl/io/ply_io.h>
+#include <pcl/point_types.h>
 
 #include "CommonFunctions.h"
 #include "Timer.h"
@@ -15,7 +20,8 @@ LineDetection3D::~LineDetection3D()
 {
 }
 
-void LineDetection3D::run( PointCloud<double> &data, int k, std::vector<PLANE> &planes, std::vector<std::vector<cv::Point3d> > &lines, std::vector<double> &ts  )
+void LineDetection3D::run(PointCloud<double> &data, int k, PlaneList &planes,
+                          Line3DList &lines, std::vector<double> &ts)
 {
 	this->pointData = data;
 	this->pointNum = data.pts.size();
@@ -379,7 +385,7 @@ void LineDetection3D::regionMerging( double thAngle, std::vector<std::vector<int
 	}
 }
 
-void LineDetection3D::planeBased3DLineDetection( std::vector<std::vector<int> > &regions, std::vector<PLANE> &planes )
+void LineDetection3D::planeBased3DLineDetection(std::vector<std::vector<int> > &regions, PlaneList &planes)
 {
 	double thAngle = 10.0/180.0*CV_PI;
 	double thLineLength = 8*this->scale;
@@ -580,16 +586,16 @@ void LineDetection3D::lineFromMask( cv::Mat &mask, int thLineLengthPixel, std::v
 }
 
 
-void LineDetection3D::postProcessing( std::vector<PLANE> &planes, std::vector<std::vector<cv::Point3d> > &lines )
+void LineDetection3D::postProcessing(PlaneList &planes, Line3DList &lines)
 {
 	// step1: plane line regularization
-	outliersRemoval( planes );
+	outliersRemoval(planes);
 
 	// step2: line merging
-	lineMerging( planes, lines );
+	lineMerging(planes, lines);
 }
 
-void LineDetection3D::outliersRemoval( std::vector<PLANE> &planes )
+void LineDetection3D::outliersRemoval(PlaneList &planes)
 {
 	double thCosAngleIN = cos(12.5/180.0*CV_PI);
 	double thCosAngleNEW = cos(30.0/180.0*CV_PI);
@@ -802,7 +808,7 @@ void LineDetection3D::outliersRemoval( std::vector<PLANE> &planes )
 	planes = planesNew;
 }
 
-void LineDetection3D::lineMerging( std::vector<PLANE> &planes, std::vector<std::vector<cv::Point3d> > &lines )
+void LineDetection3D::lineMerging(PlaneList &planes, Line3DList &lines)
 {
 	double thGapRatio = 20;
 	double thMergeRatio = 6;
@@ -966,4 +972,105 @@ void LineDetection3D::lineMerging( std::vector<PLANE> &planes, std::vector<std::
 	}
 
 	lines = linesNew;
+}
+
+void WritePlanesToPLYFile(const std::string &file_path,
+                          const PlaneList &planes, double scale) {
+  const double scale_factor = 1.0 / (scale / 10);
+
+  pcl::PointCloud<pcl::PointXYZRGB> cloud;
+  cloud.points.reserve(planes.size() * 4000);
+
+  for (size_t m = 0; m < planes.size(); ++m) {
+    const uint8_t r = std::rand() % 255;
+    const uint8_t g = std::rand() % 255;
+    const uint8_t b = std::rand() % 255;
+
+  	const auto& plane = planes[m];
+  	for (size_t i = 0; i < plane.lines3d.size(); ++i) {
+  		for (size_t j = 0; j < plane.lines3d[i].size(); ++j) {
+  			const auto& line = plane.lines3d[i][j];
+  			const cv::Point3d dev = line[1] - line[0];
+  			const double l = std::sqrt(dev.x * dev.x + dev.y * dev.y + dev.z * dev.z);
+        const int k = l * scale_factor;
+
+        double x = line[0].x;
+        double y = line[0].y;
+        double z = line[0].z;
+        const double dx = dev.x / k;
+        const double dy = dev.y / k;
+        const double dz = dev.z / k;
+
+        for (int jj = 0; jj < k; ++jj) {
+		      x += dx;
+		      y += dy;
+		      z += dz;
+
+		      pcl::PointXYZRGB p;
+		      p.x = x;
+		      p.y = y;
+		      p.z = z;
+		      p.r = r;
+		      p.g = g;
+		      p.b = b;
+		      cloud.push_back(std::move(p));
+		    }
+  		}
+  	}
+  }
+
+  pcl::PLYWriter ply_writer;
+  ply_writer.write(file_path, cloud);
+
+  std::cout << "PointCloud::WritePlanesToPLYFile(): n="
+            << cloud.size() << std::endl;
+}
+
+void WriteLinesToPLYFile(const std::string &file_path,
+                         const Line3DList &lines, double scale) {
+  const double scale_factor = 1.0 / (scale / 10);
+
+  pcl::PointCloud<pcl::PointXYZRGB> cloud;
+  cloud.points.reserve(lines.size() * 1000);
+
+  for (size_t i = 0; i < lines.size(); ++i)
+  {
+    const auto& line = lines[i];
+    const cv::Point3d dev = line[1] - line[0];
+    const double l = std::sqrt(dev.x * dev.x + dev.y * dev.y + dev.z * dev.z);
+    const int k = l * scale_factor;
+
+    double x = line[0].x;
+    double y = line[0].y;
+    double z = line[0].z;
+    const double dx = dev.x / k;
+    const double dy = dev.y / k;
+    const double dz = dev.z / k;
+
+    const uint8_t r = std::rand() % 255;
+    const uint8_t g = std::rand() % 255;
+    const uint8_t b = std::rand() % 255;
+
+    for (int j = 0; j < k; ++j)
+    {
+      x += dx;
+      y += dy;
+      z += dz;
+
+      pcl::PointXYZRGB p;
+      p.x = x;
+      p.y = y;
+      p.z = z;
+      p.r = r;
+      p.g = g;
+      p.b = b;
+      cloud.push_back(std::move(p));
+    }
+  }
+
+  pcl::PLYWriter ply_writer;
+  ply_writer.write(file_path, cloud);
+
+  std::cout << "PointCloud::WriteLinesToPLYFile(): n="
+            << cloud.size() << std::endl;
 }

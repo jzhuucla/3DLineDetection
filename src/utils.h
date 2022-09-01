@@ -31,20 +31,49 @@
 
 #include <cstdlib>
 #include <iostream>
+#include <string>
+
+#include <pcl/io/ply_io.h>
+#include <pcl/point_types.h>
 
 template <typename T>
 struct PointCloud
 {
 	struct PtData
 	{
-		T  x,y,z;
+		T x{0};
+		T y{0};
+		T z{0};
+		float intensity{0.0f};
+		uint8_t r{0};
+		uint8_t g{0};
+		uint8_t b{0};
 
-		PtData(T xx, T yy, T zz) { x = xx; y = yy; z = zz;}
-		PtData &operator =(const PtData &info)
+		PtData(T xx, T yy, T zz) {
+		  x = xx;
+		  y = yy;
+		  z = zz;
+	    }
+
+        PtData(T in_x, T in_y, T in_z,
+               uint8_t in_r, uint8_t in_g, uint8_t in_b) {
+		  x = in_x;
+		  y = in_y;
+		  z = in_z;
+		  r = in_r;
+		  g = in_g;
+		  b = in_b;
+	    }
+
+		PtData &operator =(const PtData &other)
 		{
-			this->x    = info.x;
-			this->y    = info.y;
-			this->z    = info.z;
+			this->x = other.x;
+			this->y = other.y;
+			this->z = other.z;
+			this->intensity = other.intensity;
+			this->r = other.r;
+			this->g = other.g;
+			this->b = other.b;
 			return *this;
 		}
 	};
@@ -76,6 +105,78 @@ struct PointCloud
 	//   Look at bb.size() to find out the expected dimensionality (e.g. 2 or 3 for point clouds)
 	template <class BBOX>
 	bool kdtree_get_bbox(BBOX& /* bb */) const { return false; }
+
+    void SaveToXYZPlyFile(const std::string &file_path) const {
+      pcl::PointCloud<pcl::PointXYZ> cloud;
+      cloud.is_dense = false;
+      cloud.resize(this->pts.size());
+      for (size_t i = 0; i < this->pts.size(); ++i) {
+        const auto& p = this->pts[i];
+        auto& p_out = cloud[i];
+        p_out.x = p.x;
+        p_out.y = p.y;
+        p_out.z = p.z;
+      }
+
+      pcl::PLYWriter ply_writer;
+      ply_writer.write(file_path, cloud);
+
+      std::cout << "PointCloud::SaveToXYZPlyFile(): n="
+                << cloud.size() << std::endl;
+    }
+
+    void ReadFromXYZPlyFile(const std::string &file_path) {
+      pcl::PointCloud<pcl::PointXYZ> cloud;
+      pcl::io::loadPLYFile(file_path, cloud);
+
+      this->pts.clear();
+      this->pts.reserve(cloud.size());
+      for (size_t i = 0; i < cloud.size(); ++i) {
+        const auto& p_in = cloud[i];
+        this->pts.emplace_back(p_in.x, p_in.y, p_in.z);
+      }
+
+      std::cout << "PointCloud::ReadFromXYZPlyFile(): n="
+                << this->pts.size() << std::endl;
+    }
+
+    void SaveToXYZRGBPlyFile(const std::string &file_path) const {
+      pcl::PointCloud<pcl::PointXYZRGB> cloud;
+      cloud.is_dense = false;
+      cloud.resize(this->pts.size());
+      for (size_t i = 0; i < this->pts.size(); ++i) {
+        const auto& p = this->pts[i];
+        auto& p_out = cloud[i];
+        p_out.x = p.x;
+        p_out.y = p.y;
+        p_out.z = p.z;
+        p_out.r = p.r;
+        p_out.g = p.g;
+        p_out.b = p.b;
+      }
+
+      pcl::PLYWriter ply_writer;
+      ply_writer.write(file_path, cloud);
+
+      std::cout << "PointCloud::SaveToXYZRGBPlyFile(): n="
+                << cloud.size() << std::endl;
+    }
+
+    void ReadFromXYZRGBPlyFile(const std::string &file_path) {
+      pcl::PointCloud<pcl::PointXYZRGB> cloud;
+      pcl::io::loadPLYFile(file_path, cloud);
+
+      this->pts.clear();
+      this->pts.reserve(cloud.size());
+      for (size_t i = 0; i < cloud.size(); ++i) {
+        const auto& p_in = cloud[i];
+        this->pts.emplace_back(p_in.x, p_in.y, p_in.z,
+                               p_in.r, p_in.g, p_in.b);
+      }
+
+      std::cout << "PointCloud::ReadFromXYZRGBPlyFile(): n="
+                << this->pts.size() << std::endl;
+    }
 };
 
 #endif //
